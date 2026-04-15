@@ -21,7 +21,15 @@ class Product extends Model
         'unit',
         'stock_qty',
         'vendor_id',
+        'image',
     ];
+
+    protected $appends = ['image_url'];
+
+    public function getImageUrlAttribute()
+    {
+        return $this->image ? asset('storage/' . $this->image) : null;
+    }
 
     public function vendor(): BelongsTo
     {

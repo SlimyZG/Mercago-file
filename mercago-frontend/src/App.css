@@ -282,3 +282,15 @@ tr:hover td {
 section {
   animation: slideFadeIn 0.4s ease-out forwards;
 }
+
+/* Product Grid for Shopper Browse */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+@media (min-width: 900px) {
+  .product-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

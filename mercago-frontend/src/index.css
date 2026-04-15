@@ -52,14 +52,21 @@
 
 body {
   margin: 0;
+  padding: 0;
   font-family: var(--font-family);
   color: var(--text);
-  background: linear-gradient(135deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
-  background-attachment: fixed;
+  background: #f5f5f5;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Dashboard shell gets the gradient */
+.app-shell {
+  background: linear-gradient(135deg, var(--bg-top) 0%, var(--bg-bottom) 100%) !important;
+  background-attachment: fixed !important;
+}
+
 
 h1, h2, h3, h4, h5, h6 {
   color: var(--text-h);
