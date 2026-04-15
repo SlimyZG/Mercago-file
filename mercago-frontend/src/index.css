@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Cool Blue Palette - Light Mode */
+  --text: #334155;
+  --text-h: #0f172a;
+  --bg-top: #e0f2fe;
+  --bg-bottom: #f0f9ff;
+  --panel-bg: rgba(255, 255, 255, 0.7);
+  --border: rgba(186, 230, 253, 0.5);
+  --border-focus: #3b82f6;
+  
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-bg: rgba(37, 99, 235, 0.1);
+  --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  --accent-gradient-hover: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  
+  --danger: #ef4444;
+  --danger-hover: #b91c1c;
+  --danger-bg: #fee2e2;
+  
+  --shadow-soft: 0 4px 20px rgba(15, 23, 42, 0.05);
+  --shadow-strong: 0 8px 30px rgba(37, 99, 235, 0.15);
+  
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Cool Blue Palette - Dark Mode */
+    --text: #cbd5e1;
+    --text-h: #f1f5f9;
+    --bg-top: #0f172a;
+    --bg-bottom: #020617;
+    --panel-bg: rgba(30, 41, 59, 0.7);
+    --border: rgba(51, 65, 85, 0.6);
+    --border-focus: #3b82f6;
+    
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
+    --accent-bg: rgba(59, 130, 246, 0.15);
+    
+    --danger: #f87171;
+    --danger-hover: #fca5a5;
+    --danger-bg: rgba(239, 68, 68, 0.15);
+    
+    --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.6);
+    --shadow-strong: 0 8px 30px rgba(59, 130, 246, 0.2);
+  }
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  color: var(--text);
+  background: linear-gradient(135deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-h);
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+  line-height: 1.2;
+}
+
+h1 { font-size: 2.25rem; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; letter-spacing: -0.01em; }
+h3 { font-size: 1.25rem; }
+
+p {
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+
+/* Base Form Elements Reset */
+input, select, button {
+  font-family: inherit;
+  color: inherit;
+  box-sizing: border-box;
+}

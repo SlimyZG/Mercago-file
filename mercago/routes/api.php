@@ -1,0 +1,34 @@
+<?php
+
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\RiderController;
+use Illuminate\Support\Facades\Route;
+
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+
+    // ── Vendor: manage their own products ──────────────────────────────
+    Route::get('/products', [ProductController::class, 'index']);
+    Route::post('/products', [ProductController::class, 'store']);
+    Route::put('/products/{id}', [ProductController::class, 'update']);
+    Route::delete('/products/{id}', [ProductController::class, 'destroy']);
+
+    // ── Shopper: browse shop + place orders + view history ─────────────
+    Route::get('/shop', [OrderController::class, 'shop']);
+    // Place an order (shopper) + order history (shopper & vendor)
+    Route::post('/orders', [OrderController::class, 'store']);
+    Route::get('/orders/history', [OrderController::class, 'history']);
+    Route::post('/orders/{id}/ready', [OrderController::class, 'markReady']); // Vendor: mark order ready for pickup
+
+    // ── Rider: see available orders, accept/decline, complete ──────────
+    Route::get('/rider/orders', [RiderController::class, 'availableOrders']);
+    Route::post('/rider/orders/{id}/accept', [RiderController::class, 'acceptOrder']);
+    Route::post('/rider/orders/{id}/decline', [RiderController::class, 'declineOrder']);
+    Route::post('/rider/orders/{id}/complete', [RiderController::class, 'completeDelivery']);
+    Route::get('/rider/my-deliveries', [RiderController::class, 'myDeliveries']);
+});

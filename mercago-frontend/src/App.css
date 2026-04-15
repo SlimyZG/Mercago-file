@@ -1,0 +1,284 @@
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  box-sizing: border-box;
+}
+
+/* Glassmorphism Card Effect */
+.card {
+  width: 100%;
+  max-width: 980px;
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2.5rem;
+  box-shadow: var(--shadow-soft);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-strong);
+}
+
+.subtitle {
+  color: var(--text);
+  opacity: 0.8;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  font-weight: 400;
+}
+
+/* Animated Tabs */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.35rem;
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tabs { background: rgba(255, 255, 255, 0.05); }
+}
+
+.tab {
+  flex: 1;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  font-weight: 500;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tab:hover {
+  background: var(--accent-bg);
+  color: var(--accent-hover);
+}
+
+.tab.active {
+  background: var(--bg-top);
+  color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab.active { background: var(--border); }
+}
+
+/* Form Layout */
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+@media (prefers-color-scheme: dark) {
+  .form-grid { background: rgba(0, 0, 0, 0.2); }
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+/* Inputs & Selects */
+input, select {
+  width: 100%;
+  background: var(--bg-bottom);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  color: var(--text-h);
+  transition: all 0.2s ease-in-out;
+  outline: none;
+}
+
+input:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+/* Primary Button with Glow */
+button[type="submit"] {
+  background: var(--accent-gradient);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.8rem 1.5rem;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+  margin-top: 0.5rem;
+}
+
+button[type="submit"]:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: var(--accent-gradient-hover);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Secondary & Danger Buttons */
+.secondary-btn, .dashboard-head button[type="button"], .list-head button[type="button"], .actions button[type="button"]:not([type="submit"]), .row-actions button[type="button"]:not(.danger-btn) {
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.secondary-btn:hover, .dashboard-head button[type="button"]:hover, .list-head button[type="button"]:hover, .actions button[type="button"]:not([type="submit"]):hover, .row-actions button[type="button"]:not(.danger-btn):hover {
+  background: rgba(0,0,0,0.05);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .secondary-btn:hover, .dashboard-head button:hover, .list-head button:hover, .actions button[type="button"]:not([type="submit"]):hover, .row-actions button[type="button"]:not(.danger-btn):hover {
+    background: rgba(255,255,255,0.05);
+  }
+}
+
+.danger-btn {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.danger-btn:hover {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 4px 15px var(--danger-bg);
+}
+
+/* Headers Elements */
+.dashboard-head, .list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.actions, .row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Errors */
+.error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-left: 4px solid var(--danger);
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  animation: slideFadeIn 0.3s ease-out forwards;
+}
+
+/* Table Design Update */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-bottom);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+th {
+  background: rgba(0, 0, 0, 0.02);
+  padding: 1rem;
+  font-weight: 600;
+  color: var(--text-h);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: dark) {
+  th { background: rgba(255, 255, 255, 0.02); }
+}
+
+td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover td {
+  background: var(--accent-bg);
+}
+
+.empty-note {
+  text-align: center;
+  color: var(--text);
+  padding: 2rem;
+  background: var(--bg-top);
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+}
+
+/* Micro-animations */
+@keyframes slideFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+section {
+  animation: slideFadeIn 0.4s ease-out forwards;
+}
