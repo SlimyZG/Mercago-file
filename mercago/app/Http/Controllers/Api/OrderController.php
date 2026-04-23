@@ -28,6 +28,7 @@ class OrderController extends Controller
                 return [
                     'vendor_id'   => $vendor->id,
                     'vendor_name' => "{$vendor->first_name} {$vendor->last_name}",
+                    'banner_url'  => $vendor->banner_url,
                     'products'    => $vendor->products->values(),
                 ];
             })

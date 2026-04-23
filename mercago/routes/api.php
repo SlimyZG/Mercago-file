@@ -15,7 +15,8 @@ Route::get('/public/shop', [OrderController::class, 'shop']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // ── Vendor: manage their own products ──────────────────────────────
+    // ── Vendor: manage their own products & profile ────────────────────
+    Route::post('/profile/banner', [AuthController::class, 'updateBanner']);
     Route::get('/products', [ProductController::class, 'index']);
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);

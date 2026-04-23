@@ -70,4 +70,24 @@ class AuthController extends Controller
             'message' => 'Logged out successfully.',
         ]);
     }
+
+    public function updateBanner(Request $request)
+    {
+        $request->validate([
+            'banner' => ['required', 'image', 'max:5120'], // 5MB max
+        ]);
+
+        $user = $request->user();
+
+        if ($request->hasFile('banner')) {
+            $path = $request->file('banner')->store('banners', 'public');
+            $user->banner_url = '/storage/' . $path;
+            $user->save();
+        }
+
+        return response()->json([
+            'message' => 'Banner updated successfully.',
+            'user' => $user,
+        ]);
+    }
 }
