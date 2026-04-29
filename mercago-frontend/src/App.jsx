@@ -55,10 +55,10 @@ function App() {
         />
       )}
 
-      {/* ── Views ── */}
       {view === 'home' || !currentUser ? (
         <HomePage
           currentUser={currentUser}
+          token={token}
           onLoginClick={() => setAuthModal('login')}
           onSignUpClick={() => setAuthModal('register')}
           onGoToDashboard={goToDashboard}

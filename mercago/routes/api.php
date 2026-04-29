@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\RiderController;
+use App\Http\Controllers\Api\ReviewController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register']);
@@ -14,9 +15,14 @@ Route::get('/public/shop', [OrderController::class, 'shop']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
+    
+    // ── Profile Management ───────────────────────────────────────────────────
+    Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/reviews', [ReviewController::class, 'store']);
 
     // ── Vendor: manage their own products & profile ────────────────────
     Route::post('/profile/banner', [AuthController::class, 'updateBanner']);
+    Route::get('/vendor/reviews', [ReviewController::class, 'vendorReviews']);
     Route::get('/products', [ProductController::class, 'index']);
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);

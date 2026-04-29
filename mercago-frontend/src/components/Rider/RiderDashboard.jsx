@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { API_BASE_URL, POLL_INTERVAL_MS } from '../../config'
 import OrderCard from '../UI/OrderCard'
+import EditProfileModal from '../UI/EditProfileModal'
 
 export default function RiderDashboard({ currentUser, token, onLogout }) {
   const [riderTab, setRiderTab] = useState('available')
@@ -10,6 +11,8 @@ export default function RiderDashboard({ currentUser, token, onLogout }) {
   const [riderLoading, setRiderLoading] = useState(false)
   const [riderMessage, setRiderMessage] = useState('')
   const [newOrderAlert, setNewOrderAlert] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [user, setUser] = useState(currentUser)
   
   const prevAvailableCount = useRef(0)
   const pollRef = useRef(null)
@@ -92,11 +95,24 @@ export default function RiderDashboard({ currentUser, token, onLogout }) {
         <div>
           <h2>Rider Dashboard</h2>
           <p style={{ margin: '2px 0 0', fontSize: '0.9rem', opacity: 0.7 }}>
-            {currentUser.first_name} {currentUser.last_name} &bull; <em>rider</em>
+            {user.first_name} {user.last_name} &bull; <em>rider</em>
           </p>
         </div>
-        <button type="button" className="secondary-btn" onClick={onLogout}>Logout</button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" className="secondary-btn" onClick={() => setShowProfileModal(true)}>Edit Profile</button>
+          <button type="button" className="secondary-btn" onClick={onLogout}>Logout</button>
+        </div>
       </div>
+
+      {showProfileModal && (
+        <EditProfileModal
+          currentUser={user}
+          token={token}
+          API_BASE_URL={API_BASE_URL}
+          onClose={() => setShowProfileModal(false)}
+          onUpdate={(updatedUser) => setUser(updatedUser)}
+        />
+      )}
 
       {newOrderAlert && (
         <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontWeight: 600, color: '#92400e' }}>

@@ -90,4 +90,25 @@ class AuthController extends Controller
             'user' => $user,
         ]);
     }
+
+    public function updateProfile(Request $request)
+    {
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:100'],
+            'middle_name' => ['nullable', 'string', 'max:50'],
+            'last_name' => ['required', 'string', 'max:100'],
+            'contact_no' => ['required', 'string', 'max:20'],
+            'age' => ['required', 'integer', 'min:1'],
+            'sex' => ['required', 'string', 'max:10'],
+            'address' => ['required', 'string'],
+        ]);
+
+        $user = $request->user();
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'Profile updated successfully.',
+            'user' => $user,
+        ]);
+    }
 }

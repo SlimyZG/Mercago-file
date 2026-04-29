@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { API_BASE_URL } from '../../config'
 import { extractError } from '../../utils/error'
 import StatusBadge from '../UI/StatusBadge'
+import EditProfileModal from '../UI/EditProfileModal'
 
 export default function ShopperDashboard({ currentUser, token, onLogout }) {
   const [shopperTab, setShopperTab] = useState(() => {
@@ -12,19 +13,25 @@ export default function ShopperDashboard({ currentUser, token, onLogout }) {
     return 'cart'
   })
   
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [user, setUser] = useState(currentUser)
+
   // States
   const [shopVendors, setShopVendors] = useState([])
   const [shopLoading, setShopLoading] = useState(false)
   const [shopError, setShopError] = useState('')
+
+  // Per-user cart key
+  const cartKey = `mercago_cart_${currentUser?.id}`
   const [cart, setCartState] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('mercago_cart') || '[]') } catch { return [] }
+    try { return JSON.parse(localStorage.getItem(cartKey) || '[]') } catch { return [] }
   })
 
   // Helper to persist cart changes
   const setCart = (updater) => {
     setCartState((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater
-      localStorage.setItem('mercago_cart', JSON.stringify(next))
+      localStorage.setItem(cartKey, JSON.stringify(next))
       return next
     })
   }
@@ -103,18 +110,29 @@ export default function ShopperDashboard({ currentUser, token, onLogout }) {
         <div>
           <h2>Shop</h2>
           <p style={{ margin: '2px 0 0', fontSize: '0.9rem', opacity: 0.7 }}>
-            {currentUser?.first_name} {currentUser?.last_name} &bull; <em>shopper</em>
+            {user?.first_name} {user?.last_name} &bull; <em>shopper</em>
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {cart.length > 0 && (
             <span style={{ background: '#2563eb', color: 'white', borderRadius: '9999px', padding: '2px 10px', fontSize: '0.85rem', fontWeight: 'bold' }}>
               🛒 {cart.length}
             </span>
           )}
+          <button type="button" className="secondary-btn" onClick={() => setShowProfileModal(true)}>Edit Profile</button>
           <button type="button" className="secondary-btn" onClick={onLogout}>Logout</button>
         </div>
       </div>
+
+      {showProfileModal && (
+        <EditProfileModal
+          currentUser={user}
+          token={token}
+          API_BASE_URL={API_BASE_URL}
+          onClose={() => setShowProfileModal(false)}
+          onUpdate={(updatedUser) => setUser(updatedUser)}
+        />
+      )}
 
       <div className="tabs" style={{ marginBottom: '1.5rem' }}>
         <button className={shopperTab === 'cart' ? 'tab active' : 'tab'} type="button" onClick={() => setShopperTab('cart')}>

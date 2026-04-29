@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { API_BASE_URL } from '../../config'
 import { extractError } from '../../utils/error'
 import StatusBadge from '../UI/StatusBadge'
+import EditProfileModal from '../UI/EditProfileModal'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -38,10 +39,16 @@ const emptyProductForm = {
 }
 
 function VendorAnalytics({ vendorOrders }) {
-  const [chartView, setChartView] = useState('sales') // 'sales' | 'products'
+  const [chartView, setChartView] = useState('sales') // 'sales' | 'products' | 'calendar'
+  const [selectedProduct, setSelectedProduct] = useState(null)
   const [dateRange, setDateRange] = useState(14) // 7 | 14 | 30
   const [barMetric, setBarMetric] = useState('qty') // 'qty' | 'revenue'
   const chartRef = useRef(null)
+
+  // Calendar state
+  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth())
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear())
+  const [selectedCalDate, setSelectedCalDate] = useState(null)
 
   // Helper: check if a date string falls within a date range
   const isInRange = (dateStr, startDate, endDate) => {
@@ -101,6 +108,22 @@ function VendorAnalytics({ vendorOrders }) {
     salesByDate[dStr] += parseFloat(o.total_amount) || 0
   })
 
+  // Group specific product sales by Date
+  const productSalesByDate = {}
+  const productQtyByDate = {}
+  if (selectedProduct) {
+    vendorOrders.forEach(o => {
+      const dStr = o.ordered_at ? o.ordered_at.split(' ')[0] : 'Unknown'
+      const matchedItem = o.items.find(i => i.product_name === selectedProduct)
+      if (matchedItem) {
+        if (!productSalesByDate[dStr]) productSalesByDate[dStr] = 0
+        if (!productQtyByDate[dStr]) productQtyByDate[dStr] = 0
+        productSalesByDate[dStr] += parseFloat(matchedItem.subtotal) || 0
+        productQtyByDate[dStr] += parseFloat(matchedItem.quantity) || 0
+      }
+    })
+  }
+
   // Build a continuous calendar-day range ending today, filling gaps with ₱0
   const buildContinuousRange = (days) => {
     const dates = []
@@ -114,20 +137,30 @@ function VendorAnalytics({ vendorOrders }) {
   }
   const sortedDates = buildContinuousRange(dateRange).map(d => {
     if (!salesByDate[d]) salesByDate[d] = 0
+    if (selectedProduct) {
+      if (!productSalesByDate[d]) productSalesByDate[d] = 0
+      if (!productQtyByDate[d]) productQtyByDate[d] = 0
+    }
     return d
   })
 
-  // Top Products
+  // Top Products (respecting date range)
   const productTally = {}
   vendorOrders.forEach(o => {
-    o.items.forEach(i => {
-      const name = i.product_name
-      if (!productTally[name]) productTally[name] = { qty: 0, rev: 0 }
-      productTally[name].qty += parseFloat(i.quantity) || 0
-      productTally[name].rev += parseFloat(i.subtotal) || 0
-    })
+    if (isInRange(o.ordered_at, currentStart, now)) {
+      o.items.forEach(i => {
+        const name = i.product_name
+        if (!productTally[name]) productTally[name] = { qty: 0, rev: 0 }
+        productTally[name].qty += parseFloat(i.quantity) || 0
+        productTally[name].rev += parseFloat(i.subtotal) || 0
+      })
+    }
   })
-  const topProducts = Object.entries(productTally)
+
+  // Full list of products sold in the period
+  const allProductsSold = Object.entries(productTally).sort((a, b) => b[1].rev - a[1].rev)
+
+  const topProducts = [...allProductsSold]
     .sort((a, b) => b[1].qty - a[1].qty)
     .slice(0, 8)
 
@@ -158,6 +191,38 @@ function VendorAnalytics({ vendorOrders }) {
         },
         borderWidth: 2.5,
         pointBackgroundColor: '#3b82f6',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: dateRange <= 14 ? 5 : 3,
+        pointHoverRadius: 7,
+        tension: 0.35,
+        fill: true,
+      },
+    ],
+  }
+
+  // ── Chart Data: Specific Product Line Chart ──
+  const productLineData = {
+    labels: sortedDates.map(d => {
+      const parts = d.split('-')
+      return `${parts[1]}-${parts[2]}`
+    }),
+    datasets: [
+      {
+        label: `${selectedProduct} Revenue (₱)`,
+        data: sortedDates.map(d => productSalesByDate[d]),
+        borderColor: '#10b981',
+        backgroundColor: (context) => {
+          const { ctx, chartArea } = context.chart
+          if (!chartArea) return 'rgba(16, 185, 129, 0.1)'
+          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom)
+          gradient.addColorStop(0, 'rgba(16, 185, 129, 0.28)')
+          gradient.addColorStop(0.6, 'rgba(16, 185, 129, 0.08)')
+          gradient.addColorStop(1, 'rgba(16, 185, 129, 0)')
+          return gradient
+        },
+        borderWidth: 2.5,
+        pointBackgroundColor: '#10b981',
         pointBorderColor: '#fff',
         pointBorderWidth: 2,
         pointRadius: dateRange <= 14 ? 5 : 3,
@@ -230,6 +295,30 @@ function VendorAnalytics({ vendorOrders }) {
     animation: {
       duration: 800,
       easing: 'easeOutQuart',
+    },
+  }
+
+  const productLineOptions = {
+    ...salesLineOptions,
+    plugins: {
+      ...salesLineOptions.plugins,
+      tooltip: {
+        backgroundColor: '#1e293b',
+        titleFont: { size: 13, weight: '600' },
+        bodyFont: { size: 12 },
+        padding: 12,
+        cornerRadius: 8,
+        callbacks: {
+          label: (ctx) => {
+            const dateStr = sortedDates[ctx.dataIndex]
+            return `Qty: ${productQtyByDate[dateStr] || 0}`
+          },
+          afterLabel: (ctx) => {
+            const dateStr = sortedDates[ctx.dataIndex]
+            return `Revenue: ₱${(productSalesByDate[dateStr] || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+          }
+        },
+      },
     },
   }
 
@@ -419,16 +508,22 @@ function VendorAnalytics({ vendorOrders }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', gap: '8px', background: '#f8fafc', padding: '4px', borderRadius: '8px' }}>
             <button
-              onClick={() => setChartView('sales')}
+              onClick={() => { setChartView('sales'); setSelectedProduct(null); }}
               style={chartToggleStyle(chartView === 'sales')}
             >
               📈 Sales Chart
             </button>
             <button
-              onClick={() => setChartView('products')}
+              onClick={() => { setChartView('products'); setSelectedProduct(null); }}
               style={chartToggleStyle(chartView === 'products')}
             >
               📊 Top Products
+            </button>
+            <button
+              onClick={() => { setChartView('calendar'); setSelectedProduct(null); }}
+              style={chartToggleStyle(chartView === 'calendar')}
+            >
+              📅 Calendar
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -481,31 +576,277 @@ function VendorAnalytics({ vendorOrders }) {
             <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
               {chartView === 'sales'
                 ? `Revenue over last ${dateRange} days`
+                : chartView === 'calendar'
+                ? 'Click a date to view daily product analytics'
                 : `Top ${sortedProducts.length} products by ${barMetric === 'qty' ? 'quantity sold' : 'revenue'}`}
             </span>
           </div>
         </div>
 
         {/* Charts */}
-        <div style={{ height: '320px', position: 'relative' }}>
+        <div style={{ minHeight: '320px', position: 'relative' }}>
           {chartView === 'sales' ? (
-            sortedDates.length === 0 ? (
+            <div style={{ height: '320px' }}>
+            {sortedDates.length === 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
                 <p>No sales data available yet.</p>
               </div>
             ) : (
               <Line data={salesLineData} options={salesLineOptions} plugins={[crosshairPlugin]} />
-            )
-          ) : (
-            topProducts.length === 0 ? (
+            )}
+            </div>
+          ) : chartView === 'products' ? (
+            <div style={{ height: '320px' }}>
+            {selectedProduct ? (
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
+                  <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#111' }}>📈 {selectedProduct} Sales Trend</h4>
+                  <button onClick={() => setSelectedProduct(null)} style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 600, padding: '4px 12px', borderRadius: '6px' }}>← Back to All Products</button>
+                </div>
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <Line data={productLineData} options={productLineOptions} plugins={[crosshairPlugin]} />
+                </div>
+              </div>
+            ) : topProducts.length === 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
                 <p>No products sold yet.</p>
               </div>
             ) : (
               <Bar data={productsBarData} options={productsBarOptions} plugins={[barLabelPlugin]} />
-            )
+            )}
+            </div>
+          ) : (
+            /* ── Calendar View ── */
+            (() => {
+              const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate()
+              const firstDayOfWeek = new Date(calendarYear, calendarMonth, 1).getDay()
+              const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
+              const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+
+              // Build daily revenue map for this month
+              const dailyRevMap = {}
+              let maxDayRev = 0
+              vendorOrders.forEach(o => {
+                const dStr = o.ordered_at ? o.ordered_at.split(' ')[0] : null
+                if (!dStr) return
+                const [y, m] = dStr.split('-').map(Number)
+                if (y === calendarYear && m === calendarMonth + 1) {
+                  if (!dailyRevMap[dStr]) dailyRevMap[dStr] = 0
+                  dailyRevMap[dStr] += parseFloat(o.total_amount) || 0
+                  if (dailyRevMap[dStr] > maxDayRev) maxDayRev = dailyRevMap[dStr]
+                }
+              })
+
+              // Selected date snapshot
+              const selDateStr = selectedCalDate
+              let dayOrders = [], dayRevenue = 0, dayItems = 0, dayProductMap = {}
+              if (selDateStr) {
+                vendorOrders.forEach(o => {
+                  const dStr = o.ordered_at ? o.ordered_at.split(' ')[0] : null
+                  if (dStr === selDateStr) {
+                    dayOrders.push(o)
+                    dayRevenue += parseFloat(o.total_amount) || 0
+                    o.items.forEach(item => {
+                      const n = item.product_name
+                      if (!dayProductMap[n]) dayProductMap[n] = { qty: 0, rev: 0 }
+                      dayProductMap[n].qty += parseInt(item.quantity, 10) || 0
+                      dayProductMap[n].rev += parseFloat(item.subtotal) || 0
+                      dayItems += parseInt(item.quantity, 10) || 0
+                    })
+                  }
+                })
+              }
+              const dayProductList = Object.entries(dayProductMap).sort((a, b) => b[1].rev - a[1].rev)
+              const todayStr = new Date().toISOString().split('T')[0]
+
+              return (
+                <div>
+                  {/* Month Navigation */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <button onClick={() => { if (calendarMonth === 0) { setCalendarMonth(11); setCalendarYear(y => y - 1) } else setCalendarMonth(m => m - 1) }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: 600, color: '#475569', fontSize: '1rem' }}>◀</button>
+                    <h4 style={{ margin: 0, fontSize: '1.15rem', color: '#111', fontWeight: 700 }}>{monthNames[calendarMonth]} {calendarYear}</h4>
+                    <button onClick={() => { if (calendarMonth === 11) { setCalendarMonth(0); setCalendarYear(y => y + 1) } else setCalendarMonth(m => m + 1) }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: 600, color: '#475569', fontSize: '1rem' }}>▶</button>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                    {dayNames.map(d => (
+                      <div key={d} style={{ textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', padding: '6px 0', textTransform: 'uppercase' }}>{d}</div>
+                    ))}
+                    {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+                      <div key={`empty-${i}`} />
+                    ))}
+                    {Array.from({ length: daysInMonth }).map((_, i) => {
+                      const day = i + 1
+                      const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                      const rev = dailyRevMap[dateStr] || 0
+                      const intensity = maxDayRev > 0 ? Math.min(rev / maxDayRev, 1) : 0
+                      const isToday = dateStr === todayStr
+                      const isSelected = dateStr === selectedCalDate
+                      const isFuture = new Date(dateStr) > new Date()
+
+                      return (
+                        <div
+                          key={day}
+                          onClick={() => !isFuture && setSelectedCalDate(dateStr === selectedCalDate ? null : dateStr)}
+                          style={{
+                            position: 'relative',
+                            padding: '8px 4px',
+                            minHeight: '52px',
+                            borderRadius: '8px',
+                            cursor: isFuture ? 'default' : 'pointer',
+                            opacity: isFuture ? 0.35 : 1,
+                            transition: 'all 0.2s',
+                            border: isSelected ? '2px solid #3b82f6' : isToday ? '2px solid #10b981' : '1px solid #e5e7eb',
+                            background: isSelected ? 'rgba(59,130,246,0.08)' : rev > 0 ? `rgba(59,130,246,${0.04 + intensity * 0.18})` : '#fafafa',
+                            textAlign: 'center',
+                          }}
+                          onMouseEnter={e => { if (!isFuture) e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)' }}
+                          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
+                        >
+                          <div style={{ fontSize: '0.85rem', fontWeight: isToday || isSelected ? 800 : 500, color: isSelected ? '#3b82f6' : isToday ? '#10b981' : '#374151' }}>{day}</div>
+                          {rev > 0 && (
+                            <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#3b82f6', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>₱{rev >= 1000 ? `${(rev/1000).toFixed(1)}k` : rev.toFixed(0)}</div>
+                          )}
+                          {rev > 0 && (
+                            <div style={{ position: 'absolute', bottom: '3px', left: '50%', transform: 'translateX(-50%)', width: `${12 + intensity * 20}px`, height: '3px', borderRadius: '2px', background: `rgba(59,130,246,${0.3 + intensity * 0.7})` }} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Legend */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Less</span>
+                    {[0.05, 0.1, 0.15, 0.2, 0.25].map((op, i) => (
+                      <div key={i} style={{ width: '14px', height: '14px', borderRadius: '3px', background: `rgba(59,130,246,${op})`, border: '1px solid rgba(59,130,246,0.15)' }} />
+                    ))}
+                    <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>More Revenue</span>
+                  </div>
+
+                  {/* Daily Snapshot */}
+                  {selectedCalDate && (
+                    <div style={{ marginTop: '24px', animation: 'slideFadeIn 0.3s ease-out' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#111' }}>
+                          📋 Daily Snapshot — {new Date(selectedCalDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </h4>
+                        <button onClick={() => setSelectedCalDate(null)} style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 600, padding: '4px 12px', borderRadius: '6px', fontSize: '0.8rem' }}>✕ Close</button>
+                      </div>
+
+                      {/* Day Summary Cards */}
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                        {[
+                          { label: 'Revenue', value: `₱${dayRevenue.toFixed(2)}`, icon: '💰', color: '#3b82f6' },
+                          { label: 'Orders', value: dayOrders.length, icon: '🛒', color: '#8b5cf6' },
+                          { label: 'Items Sold', value: dayItems, icon: '📦', color: '#10b981' },
+                          { label: 'Products', value: dayProductList.length, icon: '🏷️', color: '#f59e0b' },
+                        ].map((c, i) => (
+                          <div key={i} style={{ flex: '1 1 120px', background: '#f8fafc', padding: '14px', borderRadius: '8px', borderLeft: `3px solid ${c.color}` }}>
+                            <div style={{ fontSize: '0.7rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>{c.icon} {c.label}</div>
+                            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginTop: '4px' }}>{c.value}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Product Breakdown Table */}
+                      {dayProductList.length > 0 ? (
+                        <div className="table-wrap">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Product</th>
+                                <th>Qty Sold</th>
+                                <th>Revenue</th>
+                                <th>% of Day</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dayProductList.map(([name, data]) => (
+                                <tr key={name}>
+                                  <td style={{ fontWeight: 600, color: '#334155' }}>{name}</td>
+                                  <td>{data.qty}</td>
+                                  <td style={{ fontWeight: 700, color: '#111' }}>₱{data.rev.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                  <td>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <div style={{ flex: 1, height: '6px', background: '#e5e7eb', borderRadius: '3px', maxWidth: '80px' }}>
+                                        <div style={{ width: `${dayRevenue > 0 ? (data.rev / dayRevenue * 100) : 0}%`, height: '100%', background: '#3b82f6', borderRadius: '3px', transition: 'width 0.5s' }} />
+                                      </div>
+                                      <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{dayRevenue > 0 ? (data.rev / dayRevenue * 100).toFixed(1) : 0}%</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #e2e8f0' }}>
+                          <p style={{ margin: 0, fontSize: '0.95rem' }}>📭 No sales recorded on this date.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })()
           )}
         </div>
+
+        {chartView === 'products' && allProductsSold.length > 0 && (
+          <div style={{ marginTop: '2.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <span style={{ fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Period Summary ({dateRange} Days)</span>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginTop: '4px' }}>
+                  {allProductsSold.length} Unique Products
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Total Items Sold</span>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>
+                  {allProductsSold.reduce((sum, [_, data]) => sum + data.qty, 0)} items
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Total Revenue generated</span>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#3b82f6', marginTop: '4px' }}>
+                  ₱{allProductsSold.reduce((sum, [_, data]) => sum + data.rev, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+
+            <h4 style={{ margin: '0 0 16px', fontSize: '1.1rem', color: '#111' }}>Full List of Products Sold</h4>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product Name</th>
+                    <th>Quantity Sold</th>
+                    <th>Total Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allProductsSold.map(([name, data]) => (
+                    <tr 
+                      key={name}
+                      onClick={() => { setChartView('products'); setSelectedProduct(name); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                      style={{ cursor: 'pointer', transition: 'background 0.2s' }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      title={`View sales chart for ${name}`}
+                    >
+                      <td style={{ fontWeight: 600, color: '#334155' }}>{name}</td>
+                      <td>{data.qty}</td>
+                      <td style={{ fontWeight: 700, color: '#111' }}>₱{data.rev.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -514,6 +855,9 @@ function VendorAnalytics({ vendorOrders }) {
 export default function VendorDashboard({ currentUser, token, onLogout }) {
   const [vendorTab, setVendorTab] = useState('analytics')
   
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [user, setUser] = useState(currentUser)
+
   // Product State
   const [products, setProducts] = useState([])
   const [productsLoading, setProductsLoading] = useState(false)
@@ -532,6 +876,10 @@ export default function VendorDashboard({ currentUser, token, onLogout }) {
   const [isUploadingBanner, setIsUploadingBanner] = useState(false)
   const [bannerError, setBannerError] = useState('')
   const [bannerSuccess, setBannerSuccess] = useState('')
+
+  // Reviews State
+  const [myReviews, setMyReviews] = useState([])
+  const [myAvgRating, setMyAvgRating] = useState(0)
 
   const authHeaders = {
     Authorization: `Bearer ${token}`,
@@ -646,10 +994,22 @@ export default function VendorDashboard({ currentUser, token, onLogout }) {
     }
   }
 
+  const fetchVendorReviews = async () => {
+    if (!token) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/vendor/reviews`, { headers: authHeaders })
+      if (!res.ok) return
+      const d = await res.json()
+      setMyReviews(d.reviews || [])
+      setMyAvgRating(d.avg_rating || 0)
+    } catch { /* silent */ }
+  }
+
   useEffect(() => {
     if (!token) return
     fetchProducts()
     fetchVendorOrders()
+    fetchVendorReviews()
   }, [token])
 
   return (
@@ -658,11 +1018,24 @@ export default function VendorDashboard({ currentUser, token, onLogout }) {
         <div>
           <h2>Vendor Dashboard</h2>
           <p style={{ margin: '2px 0 0', fontSize: '0.9rem', opacity: 0.7 }}>
-            {currentUser.first_name} {currentUser.last_name} &bull; <em>vendor</em>
+            {user.first_name} {user.last_name} &bull; <em>vendor</em>
           </p>
         </div>
-        <button type="button" className="secondary-btn" onClick={onLogout}>Logout</button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" className="secondary-btn" onClick={() => setShowProfileModal(true)}>Edit Profile</button>
+          <button type="button" className="secondary-btn" onClick={onLogout}>Logout</button>
+        </div>
       </div>
+
+      {showProfileModal && (
+        <EditProfileModal
+          currentUser={user}
+          token={token}
+          API_BASE_URL={API_BASE_URL}
+          onClose={() => setShowProfileModal(false)}
+          onUpdate={(updatedUser) => setUser(updatedUser)}
+        />
+      )}
 
       <div className="tabs" style={{ marginBottom: '1.5rem' }}>
         <button className={vendorTab === 'analytics' ? 'tab active' : 'tab'} type="button" onClick={() => { setVendorTab('analytics'); fetchVendorOrders() }}>Analytics</button>
@@ -901,6 +1274,32 @@ export default function VendorDashboard({ currentUser, token, onLogout }) {
                 {isUploadingBanner ? 'Uploading...' : 'Upload Banner'}
               </button>
             </form>
+          </div>
+
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '1.5rem', marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h4 style={{ margin: 0 }}>Store Reviews</h4>
+              <span style={{ background: '#fef3c7', color: '#b45309', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 600 }}>
+                ★ {myAvgRating > 0 ? myAvgRating : 'New'}
+              </span>
+            </div>
+            
+            {myReviews.length === 0 ? (
+              <p style={{ color: '#6b7280', fontSize: '0.9rem', fontStyle: 'italic' }}>No reviews yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {myReviews.map(review => (
+                  <div key={review.id} style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <strong style={{ fontSize: '0.9rem', color: '#111' }}>{review.user?.first_name} {review.user?.last_name}</strong>
+                      <span style={{ color: '#f59e0b', fontSize: '0.9rem' }}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+                    </div>
+                    {review.comment && <p style={{ margin: 0, fontSize: '0.9rem', color: '#475569' }}>{review.comment}</p>}
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>{new Date(review.created_at).toLocaleDateString()}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
