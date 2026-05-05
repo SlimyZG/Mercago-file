@@ -49,6 +49,9 @@ function VendorAnalytics({ vendorOrders }) {
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth())
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear())
   const [selectedCalDate, setSelectedCalDate] = useState(null)
+  const [calRangeStart, setCalRangeStart] = useState(null)
+  const [calRangeEnd, setCalRangeEnd] = useState(null)
+  const [calMode, setCalMode] = useState('single') // 'single' | 'range'
 
   // Helper: check if a date string falls within a date range
   const isInRange = (dateStr, startDate, endDate) => {
@@ -433,20 +436,35 @@ function VendorAnalytics({ vendorOrders }) {
     },
   }
 
-  // Export CSV
+  // Export CSV — one row per line item for a proper sales report
   const handleExportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,"
-    csvContent += "Order ID,Date,Shopper,Delivery Status,Total Amount\n"
-    
+    csvContent += "Order ID,Date,Shopper,Shopper Email,Product,Qty,Unit Price (PHP),Subtotal (PHP),Order Total (PHP),Delivery Status\n"
+
     vendorOrders.forEach(o => {
-      const row = [o.order_id, o.ordered_at, o.shopper_name, o.delivery_status, o.total_amount]
-      csvContent += row.join(",") + "\n"
+      o.items.forEach(item => {
+        // Wrap string fields in quotes to safely handle commas in names
+        const row = [
+          o.order_id,
+          o.ordered_at,
+          `"${o.shopper_name}"`,
+          `"${o.shopper_email}"`,
+          `"${item.product_name}"`,
+          item.quantity,
+          Number(item.unit_price).toFixed(2),
+          Number(item.subtotal).toFixed(2),
+          Number(o.total_amount).toFixed(2),
+          o.delivery_status,
+        ]
+        csvContent += row.join(",") + "\n"
+      })
     })
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    link.setAttribute("download", "vendor_sales_report.csv")
+    // Append today's date to the filename for traceability
+    link.setAttribute("download", `sales_report_${new Date().toISOString().split('T')[0]}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -465,7 +483,7 @@ function VendorAnalytics({ vendorOrders }) {
   })
 
   return (
-    <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+    <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#111' }}>📊 System Report & Analytics</h3>
         <button onClick={handleExportCSV} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -637,36 +655,90 @@ function VendorAnalytics({ vendorOrders }) {
                 }
               })
 
-              // Selected date snapshot
-              const selDateStr = selectedCalDate
-              let dayOrders = [], dayRevenue = 0, dayItems = 0, dayProductMap = {}
-              if (selDateStr) {
+              // Selected date / range snapshot
+              const hasRange = calMode === 'range' && calRangeStart && calRangeEnd
+              const hasSingle = calMode === 'single' && selectedCalDate
+              const showSnapshot = hasRange || hasSingle
+
+              let snapOrders = [], snapRevenue = 0, snapItems = 0, snapProductMap = {}
+              if (showSnapshot) {
                 vendorOrders.forEach(o => {
                   const dStr = o.ordered_at ? o.ordered_at.split(' ')[0] : null
-                  if (dStr === selDateStr) {
-                    dayOrders.push(o)
-                    dayRevenue += parseFloat(o.total_amount) || 0
+                  if (!dStr) return
+                  let match = false
+                  if (hasSingle) {
+                    match = dStr === selectedCalDate
+                  } else {
+                    match = dStr >= calRangeStart && dStr <= calRangeEnd
+                  }
+                  if (match) {
+                    snapOrders.push(o)
+                    snapRevenue += parseFloat(o.total_amount) || 0
                     o.items.forEach(item => {
                       const n = item.product_name
-                      if (!dayProductMap[n]) dayProductMap[n] = { qty: 0, rev: 0 }
-                      dayProductMap[n].qty += parseInt(item.quantity, 10) || 0
-                      dayProductMap[n].rev += parseFloat(item.subtotal) || 0
-                      dayItems += parseInt(item.quantity, 10) || 0
+                      if (!snapProductMap[n]) snapProductMap[n] = { qty: 0, rev: 0 }
+                      snapProductMap[n].qty += parseInt(item.quantity, 10) || 0
+                      snapProductMap[n].rev += parseFloat(item.subtotal) || 0
+                      snapItems += parseInt(item.quantity, 10) || 0
                     })
                   }
                 })
               }
-              const dayProductList = Object.entries(dayProductMap).sort((a, b) => b[1].rev - a[1].rev)
+              const snapProductList = Object.entries(snapProductMap).sort((a, b) => b[1].rev - a[1].rev)
               const todayStr = new Date().toISOString().split('T')[0]
+
+              // Date click handler
+              const handleCalClick = (dateStr) => {
+                if (calMode === 'single') {
+                  setSelectedCalDate(dateStr === selectedCalDate ? null : dateStr)
+                } else {
+                  if (!calRangeStart || (calRangeStart && calRangeEnd)) {
+                    setCalRangeStart(dateStr)
+                    setCalRangeEnd(null)
+                  } else {
+                    if (dateStr < calRangeStart) {
+                      setCalRangeEnd(calRangeStart)
+                      setCalRangeStart(dateStr)
+                    } else if (dateStr === calRangeStart) {
+                      setCalRangeStart(null)
+                    } else {
+                      setCalRangeEnd(dateStr)
+                    }
+                  }
+                }
+              }
+
+              // Check if a date is in the selected range
+              const isInSelectedRange = (dateStr) => {
+                if (calMode !== 'range') return false
+                if (calRangeStart && calRangeEnd) return dateStr >= calRangeStart && dateStr <= calRangeEnd
+                return dateStr === calRangeStart
+              }
 
               return (
                 <div>
-                  {/* Month Navigation */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <button onClick={() => { if (calendarMonth === 0) { setCalendarMonth(11); setCalendarYear(y => y - 1) } else setCalendarMonth(m => m - 1) }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: 600, color: '#475569', fontSize: '1rem' }}>◀</button>
-                    <h4 style={{ margin: 0, fontSize: '1.15rem', color: '#111', fontWeight: 700 }}>{monthNames[calendarMonth]} {calendarYear}</h4>
-                    <button onClick={() => { if (calendarMonth === 11) { setCalendarMonth(0); setCalendarYear(y => y + 1) } else setCalendarMonth(m => m + 1) }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: 600, color: '#475569', fontSize: '1rem' }}>▶</button>
+                  {/* Mode Toggle + Month Navigation */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '3px', borderRadius: '6px' }}>
+                      <button onClick={() => { setCalMode('single'); setCalRangeStart(null); setCalRangeEnd(null) }} style={{ padding: '5px 14px', fontSize: '0.78rem', fontWeight: 600, border: 'none', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', background: calMode === 'single' ? '#3b82f6' : 'transparent', color: calMode === 'single' ? '#fff' : '#94a3b8' }}>📌 Single Day</button>
+                      <button onClick={() => { setCalMode('range'); setSelectedCalDate(null) }} style={{ padding: '5px 14px', fontSize: '0.78rem', fontWeight: 600, border: 'none', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', background: calMode === 'range' ? '#8b5cf6' : 'transparent', color: calMode === 'range' ? '#fff' : '#94a3b8' }}>📅 Date Range</button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <button onClick={() => { if (calendarMonth === 0) { setCalendarMonth(11); setCalendarYear(y => y - 1) } else setCalendarMonth(m => m - 1) }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: 600, color: '#475569', fontSize: '1rem' }}>◀</button>
+                      <h4 style={{ margin: 0, fontSize: '1.15rem', color: '#111', fontWeight: 700 }}>{monthNames[calendarMonth]} {calendarYear}</h4>
+                      <button onClick={() => { if (calendarMonth === 11) { setCalendarMonth(0); setCalendarYear(y => y + 1) } else setCalendarMonth(m => m + 1) }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: 600, color: '#475569', fontSize: '1rem' }}>▶</button>
+                    </div>
                   </div>
+
+                  {/* Range hint */}
+                  {calMode === 'range' && (
+                    <div style={{ marginBottom: '12px', padding: '8px 14px', background: calRangeStart && !calRangeEnd ? '#fef3c7' : calRangeStart && calRangeEnd ? '#ecfdf5' : '#f0f9ff', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 500, color: calRangeStart && !calRangeEnd ? '#92400e' : calRangeStart && calRangeEnd ? '#065f46' : '#1e40af', border: `1px solid ${calRangeStart && !calRangeEnd ? '#fde68a' : calRangeStart && calRangeEnd ? '#a7f3d0' : '#bfdbfe'}` }}>
+                      {!calRangeStart ? '👆 Click a start date' : !calRangeEnd ? `📍 Start: ${calRangeStart} — now click an end date` : `✅ Range: ${calRangeStart} → ${calRangeEnd}`}
+                      {(calRangeStart || calRangeEnd) && (
+                        <button onClick={() => { setCalRangeStart(null); setCalRangeEnd(null) }} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>✕ Clear</button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Calendar Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
@@ -682,13 +754,15 @@ function VendorAnalytics({ vendorOrders }) {
                       const rev = dailyRevMap[dateStr] || 0
                       const intensity = maxDayRev > 0 ? Math.min(rev / maxDayRev, 1) : 0
                       const isToday = dateStr === todayStr
-                      const isSelected = dateStr === selectedCalDate
+                      const isSelected = calMode === 'single' && dateStr === selectedCalDate
+                      const isRangeSelected = isInSelectedRange(dateStr)
+                      const isRangeEdge = dateStr === calRangeStart || dateStr === calRangeEnd
                       const isFuture = new Date(dateStr) > new Date()
 
                       return (
                         <div
                           key={day}
-                          onClick={() => !isFuture && setSelectedCalDate(dateStr === selectedCalDate ? null : dateStr)}
+                          onClick={() => !isFuture && handleCalClick(dateStr)}
                           style={{
                             position: 'relative',
                             padding: '8px 4px',
@@ -697,19 +771,19 @@ function VendorAnalytics({ vendorOrders }) {
                             cursor: isFuture ? 'default' : 'pointer',
                             opacity: isFuture ? 0.35 : 1,
                             transition: 'all 0.2s',
-                            border: isSelected ? '2px solid #3b82f6' : isToday ? '2px solid #10b981' : '1px solid #e5e7eb',
-                            background: isSelected ? 'rgba(59,130,246,0.08)' : rev > 0 ? `rgba(59,130,246,${0.04 + intensity * 0.18})` : '#fafafa',
+                            border: isSelected ? '2px solid #3b82f6' : isRangeEdge ? '2px solid #8b5cf6' : isRangeSelected ? '1px solid #c4b5fd' : isToday ? '2px solid #10b981' : '1px solid #e5e7eb',
+                            background: isSelected ? 'rgba(59,130,246,0.08)' : isRangeEdge ? 'rgba(139,92,246,0.15)' : isRangeSelected ? 'rgba(139,92,246,0.06)' : rev > 0 ? `rgba(59,130,246,${0.04 + intensity * 0.18})` : '#fafafa',
                             textAlign: 'center',
                           }}
                           onMouseEnter={e => { if (!isFuture) e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)' }}
                           onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
                         >
-                          <div style={{ fontSize: '0.85rem', fontWeight: isToday || isSelected ? 800 : 500, color: isSelected ? '#3b82f6' : isToday ? '#10b981' : '#374151' }}>{day}</div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: isToday || isSelected || isRangeEdge ? 800 : 500, color: isSelected ? '#3b82f6' : isRangeEdge ? '#7c3aed' : isRangeSelected ? '#6d28d9' : isToday ? '#10b981' : '#374151' }}>{day}</div>
                           {rev > 0 && (
-                            <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#3b82f6', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>₱{rev >= 1000 ? `${(rev/1000).toFixed(1)}k` : rev.toFixed(0)}</div>
+                            <div style={{ fontSize: '0.6rem', fontWeight: 700, color: isRangeSelected ? '#7c3aed' : '#3b82f6', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>₱{rev >= 1000 ? `${(rev/1000).toFixed(1)}k` : rev.toFixed(0)}</div>
                           )}
                           {rev > 0 && (
-                            <div style={{ position: 'absolute', bottom: '3px', left: '50%', transform: 'translateX(-50%)', width: `${12 + intensity * 20}px`, height: '3px', borderRadius: '2px', background: `rgba(59,130,246,${0.3 + intensity * 0.7})` }} />
+                            <div style={{ position: 'absolute', bottom: '3px', left: '50%', transform: 'translateX(-50%)', width: `${12 + intensity * 20}px`, height: '3px', borderRadius: '2px', background: isRangeSelected ? `rgba(139,92,246,${0.3 + intensity * 0.7})` : `rgba(59,130,246,${0.3 + intensity * 0.7})` }} />
                           )}
                         </div>
                       )
@@ -725,23 +799,26 @@ function VendorAnalytics({ vendorOrders }) {
                     <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>More Revenue</span>
                   </div>
 
-                  {/* Daily Snapshot */}
-                  {selectedCalDate && (
+                  {/* Snapshot Panel */}
+                  {showSnapshot && (
                     <div style={{ marginTop: '24px', animation: 'slideFadeIn 0.3s ease-out' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
                         <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#111' }}>
-                          📋 Daily Snapshot — {new Date(selectedCalDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                          {hasRange ? '📊' : '📋'} {hasRange ? 'Range Analytics' : 'Daily Snapshot'} — {hasRange
+                            ? `${new Date(calRangeStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → ${new Date(calRangeEnd + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                            : new Date(selectedCalDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </h4>
-                        <button onClick={() => setSelectedCalDate(null)} style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 600, padding: '4px 12px', borderRadius: '6px', fontSize: '0.8rem' }}>✕ Close</button>
+                        <button onClick={() => { setSelectedCalDate(null); setCalRangeStart(null); setCalRangeEnd(null) }} style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 600, padding: '4px 12px', borderRadius: '6px', fontSize: '0.8rem' }}>✕ Close</button>
                       </div>
 
-                      {/* Day Summary Cards */}
+                      {/* Summary Cards */}
                       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
                         {[
-                          { label: 'Revenue', value: `₱${dayRevenue.toFixed(2)}`, icon: '💰', color: '#3b82f6' },
-                          { label: 'Orders', value: dayOrders.length, icon: '🛒', color: '#8b5cf6' },
-                          { label: 'Items Sold', value: dayItems, icon: '📦', color: '#10b981' },
-                          { label: 'Products', value: dayProductList.length, icon: '🏷️', color: '#f59e0b' },
+                          { label: 'Revenue', value: `₱${snapRevenue.toFixed(2)}`, icon: '💰', color: '#3b82f6' },
+                          { label: 'Orders', value: snapOrders.length, icon: '🛒', color: '#8b5cf6' },
+                          { label: 'Items Sold', value: snapItems, icon: '📦', color: '#10b981' },
+                          { label: 'Products', value: snapProductList.length, icon: '🏷️', color: '#f59e0b' },
+                          ...(hasRange ? [{ label: 'Avg/Day', value: `₱${(() => { const d1 = new Date(calRangeStart); const d2 = new Date(calRangeEnd); const days = Math.max(1, Math.round((d2 - d1) / 86400000) + 1); return (snapRevenue / days).toFixed(2) })()}`, icon: '📈', color: '#06b6d4' }] : []),
                         ].map((c, i) => (
                           <div key={i} style={{ flex: '1 1 120px', background: '#f8fafc', padding: '14px', borderRadius: '8px', borderLeft: `3px solid ${c.color}` }}>
                             <div style={{ fontSize: '0.7rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>{c.icon} {c.label}</div>
@@ -751,7 +828,7 @@ function VendorAnalytics({ vendorOrders }) {
                       </div>
 
                       {/* Product Breakdown Table */}
-                      {dayProductList.length > 0 ? (
+                      {snapProductList.length > 0 ? (
                         <div className="table-wrap">
                           <table>
                             <thead>
@@ -759,11 +836,11 @@ function VendorAnalytics({ vendorOrders }) {
                                 <th>Product</th>
                                 <th>Qty Sold</th>
                                 <th>Revenue</th>
-                                <th>% of Day</th>
+                                <th>% of Total</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {dayProductList.map(([name, data]) => (
+                              {snapProductList.map(([name, data]) => (
                                 <tr key={name}>
                                   <td style={{ fontWeight: 600, color: '#334155' }}>{name}</td>
                                   <td>{data.qty}</td>
@@ -771,9 +848,9 @@ function VendorAnalytics({ vendorOrders }) {
                                   <td>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                       <div style={{ flex: 1, height: '6px', background: '#e5e7eb', borderRadius: '3px', maxWidth: '80px' }}>
-                                        <div style={{ width: `${dayRevenue > 0 ? (data.rev / dayRevenue * 100) : 0}%`, height: '100%', background: '#3b82f6', borderRadius: '3px', transition: 'width 0.5s' }} />
+                                        <div style={{ width: `${snapRevenue > 0 ? (data.rev / snapRevenue * 100) : 0}%`, height: '100%', background: hasRange ? '#8b5cf6' : '#3b82f6', borderRadius: '3px', transition: 'width 0.5s' }} />
                                       </div>
-                                      <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{dayRevenue > 0 ? (data.rev / dayRevenue * 100).toFixed(1) : 0}%</span>
+                                      <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{snapRevenue > 0 ? (data.rev / snapRevenue * 100).toFixed(1) : 0}%</span>
                                     </div>
                                   </td>
                                 </tr>
@@ -783,7 +860,7 @@ function VendorAnalytics({ vendorOrders }) {
                         </div>
                       ) : (
                         <div style={{ textAlign: 'center', color: '#9ca3af', padding: '24px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #e2e8f0' }}>
-                          <p style={{ margin: 0, fontSize: '0.95rem' }}>📭 No sales recorded on this date.</p>
+                          <p style={{ margin: 0, fontSize: '0.95rem' }}>📭 No sales recorded {hasRange ? 'in this range' : 'on this date'}.</p>
                         </div>
                       )}
                     </div>
@@ -848,7 +925,82 @@ function VendorAnalytics({ vendorOrders }) {
           </div>
         )}
       </div>
+
+    {/* ── Activity Log ── */}
+    <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', marginTop: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#111' }}>🕑 Activity Log</h3>
+        <span style={{ fontSize: '0.78rem', color: '#94a3b8', background: '#f1f5f9', padding: '4px 10px', borderRadius: '12px' }}>
+          System-generated · {vendorOrders.length} events
+        </span>
+      </div>
+
+      {vendorOrders.length === 0 ? (
+        <p style={{ color: '#9ca3af', textAlign: 'center', padding: '24px 0', margin: 0 }}>No activity yet.</p>
+      ) : (
+        <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {/* One log entry per order, sorted newest-first, max 50 */}
+          {[...vendorOrders]
+            .sort((a, b) => new Date(b.ordered_at) - new Date(a.ordered_at))
+            .slice(0, 50)
+            .map((o, idx) => {
+              // Map delivery_status → icon + label + color
+              const statusMap = {
+                finding_rider: { icon: '🔍', label: 'Finding Rider', color: '#f59e0b', bg: '#fffbeb' },
+                found_rider:   { icon: '🏍️', label: 'Rider Found',   color: '#3b82f6', bg: '#eff6ff' },
+                ongoing:       { icon: '🚴', label: 'On the Way',    color: '#8b5cf6', bg: '#f5f3ff' },
+                delivered:     { icon: '✅', label: 'Delivered',     color: '#10b981', bg: '#ecfdf5' },
+                cancelled:     { icon: '❌', label: 'Cancelled',     color: '#ef4444', bg: '#fef2f2' },
+              }
+              const s = statusMap[o.delivery_status] || { icon: '📋', label: o.delivery_status, color: '#6b7280', bg: '#f9fafb' }
+              const itemSummary = o.items.map(i => `${i.product_name} ×${i.quantity}`).join(', ')
+
+              return (
+                <div
+                  key={o.order_id + idx}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: '12px',
+                    padding: '10px 12px', borderRadius: '8px',
+                    background: idx % 2 === 0 ? '#fafafa' : '#fff',
+                    border: '1px solid #f1f5f9',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                  onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fafafa' : '#fff'}
+                >
+                  {/* Status icon bubble */}
+                  <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', border: `1px solid ${s.color}22` }}>
+                    {s.icon}
+                  </div>
+
+                  {/* Event description */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      🛒 Order from <span style={{ color: '#3b82f6' }}>{o.shopper_name}</span>
+                      <span style={{ fontWeight: 400, color: '#6b7280' }}> — </span>
+                      <span style={{ color: '#059669', fontWeight: 700 }}>₱{Number(o.total_amount).toFixed(2)}</span>
+                    </div>
+                    <div style={{ fontSize: '0.775rem', color: '#6b7280', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {itemSummary}
+                    </div>
+                  </div>
+
+                  {/* Status badge + timestamp */}
+                  <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: s.color, background: s.bg, padding: '2px 8px', borderRadius: '10px', border: `1px solid ${s.color}33`, whiteSpace: 'nowrap' }}>
+                      {s.label}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '4px', whiteSpace: 'nowrap' }}>
+                      {o.ordered_at}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+        </div>
+      )}
     </div>
+    </>
   )
 }
 

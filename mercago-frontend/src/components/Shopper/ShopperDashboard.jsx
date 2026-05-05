@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { API_BASE_URL } from '../../config'
 import { extractError } from '../../utils/error'
 import StatusBadge from '../UI/StatusBadge'
@@ -39,6 +39,10 @@ export default function ShopperDashboard({ currentUser, token, onLogout }) {
   const [orderHistory, setOrderHistory] = useState([])
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
   const [orderMessage, setOrderMessage] = useState('')
+  const [cartWarning, setCartWarning] = useState('') // stock validation feedback
+  const [pollCountdown, setPollCountdown] = useState(20) // seconds until next auto-refresh
+  const pollRef = useRef(null)
+  const countdownRef = useRef(null)
 
   const authHeaders = {
     Authorization: `Bearer ${token}`,
@@ -67,10 +71,19 @@ export default function ShopperDashboard({ currentUser, token, onLogout }) {
     } catch { /* silent */ }
   }
 
+  // Add to cart with client-side stock cap
   const addToCart = (product, vendorName) => {
     setCart((prev) => {
       const ex = prev.find((i) => i.product.id === product.id)
-      if (ex) return prev.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i)
+      if (ex) {
+        // Don't exceed available stock
+        if (ex.quantity >= product.stock_qty) {
+          setCartWarning(`⚠️ Only ${product.stock_qty} unit(s) of "${product.product_name}" available.`)
+          setTimeout(() => setCartWarning(''), 3000)
+          return prev
+        }
+        return prev.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i)
+      }
       return [...prev, { product: { ...product, vendorName }, quantity: 1 }]
     })
   }
@@ -102,6 +115,23 @@ export default function ShopperDashboard({ currentUser, token, onLogout }) {
     if (!token) return
     fetchShop()
     fetchOrderHistory()
+
+    // Auto-refresh order history every 20 seconds so shopper
+    // sees status updates without manually clicking refresh
+    pollRef.current = setInterval(() => {
+      fetchOrderHistory()
+      setPollCountdown(20)
+    }, 20000)
+
+    // Countdown ticker for the UI indicator
+    countdownRef.current = setInterval(() => {
+      setPollCountdown(prev => (prev <= 1 ? 20 : prev - 1))
+    }, 1000)
+
+    return () => {
+      clearInterval(pollRef.current)
+      clearInterval(countdownRef.current)
+    }
   }, [token])
 
   return (
@@ -147,6 +177,11 @@ export default function ShopperDashboard({ currentUser, token, onLogout }) {
         <>
           <h3>Your Cart</h3>
           {orderMessage ? <p style={{ fontWeight: 'bold', color: orderMessage.startsWith('✅') ? '#059669' : '#ef4444' }}>{orderMessage}</p> : null}
+          {cartWarning && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '6px', padding: '8px 14px', marginBottom: '12px', fontSize: '0.85rem', fontWeight: 500, color: '#92400e' }}>
+              {cartWarning}
+            </div>
+          )}
           {cart.length === 0 ? <p className="empty-note">Cart is empty. Browse to add items!</p> : (
             <>
               <div className="table-wrap">
@@ -188,10 +223,14 @@ export default function ShopperDashboard({ currentUser, token, onLogout }) {
       {shopperTab === 'history' && (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3>My Orders</h3>
-            <button type="button" className="secondary-btn" onClick={fetchOrderHistory}>Refresh</button>
+            <h3 style={{ margin: 0 }}>My Orders</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '0.78rem', color: '#94a3b8', background: '#f1f5f9', padding: '3px 10px', borderRadius: '10px' }}>
+                🔄 Auto-refreshing in {pollCountdown}s
+              </span>
+              <button type="button" className="secondary-btn" onClick={() => { fetchOrderHistory(); setPollCountdown(20) }}>Refresh Now</button>
+            </div>
           </div>
-          <p style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: 0 }}>Refresh to see latest delivery status.</p>
           {orderHistory.length === 0 ? <p className="empty-note">No orders yet.</p>
             : orderHistory.map((order) => (
               <div key={order.order_id} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '1rem', marginBottom: '1rem' }}>
